@@ -645,4 +645,397 @@ router.post("/checkin", async (req, res) => {
   }
 });
 
+router.post("/goals", requireAuth, async (req, res) => {
+  try {
+    const {
+      title,
+      description,
+      category_id,
+      goal_type,
+      unit,
+      minimum_value,
+      target_value,
+      bonus_value,
+      deadline,
+    } = req.body;
+
+    if (!title?.trim()) {
+      return res.status(400).json({
+        error: "Le titre de l’objectif est requis.",
+      });
+    }
+
+    if (!category_id) {
+      return res.status(400).json({
+        error: "La catégorie est requise.",
+      });
+    }
+
+    if (
+      minimum_value !== null &&
+      minimum_value !== undefined &&
+      Number(minimum_value) < 0
+    ) {
+      return res.status(400).json({
+        error: "La valeur Minimum ne peut pas être négative.",
+      });
+    }
+
+    if (
+      target_value !== null &&
+      target_value !== undefined &&
+      Number(target_value) < 0
+    ) {
+      return res.status(400).json({
+        error: "La valeur Target ne peut pas être négative.",
+      });
+    }
+
+    if (
+      bonus_value !== null &&
+      bonus_value !== undefined &&
+      Number(bonus_value) < 0
+    ) {
+      return res.status(400).json({
+        error: "La valeur Bonus ne peut pas être négative.",
+      });
+    }
+
+    if (
+      minimum_value !== null &&
+      target_value !== null &&
+      minimum_value !== undefined &&
+      target_value !== undefined &&
+      Number(target_value) < Number(minimum_value)
+    ) {
+      return res.status(400).json({
+        error: "Target doit être supérieur ou égal à Minimum.",
+      });
+    }
+
+    if (
+      target_value !== null &&
+      bonus_value !== null &&
+      target_value !== undefined &&
+      bonus_value !== undefined &&
+      Number(bonus_value) < Number(target_value)
+    ) {
+      return res.status(400).json({
+        error: "Bonus doit être supérieur ou égal à Target.",
+      });
+    }
+
+    // On récupère le projet actif de l'utilisateur
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("user_id", req.user.id)
+      .eq("status", "active")
+      .maybeSingle();
+
+    if (projectError) {
+      console.error("Erreur récupération projet:", projectError);
+
+      return res.status(500).json({
+        error: "Impossible de récupérer le projet.",
+      });
+    }
+
+    if (!project) {
+      return res.status(404).json({
+        error: "Aucun projet actif trouvé.",
+      });
+    }
+
+    // Vérifie que la catégorie existe
+    const { data: category, error: categoryError } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("id", category_id)
+      .maybeSingle();
+
+    if (categoryError) {
+      console.error("Erreur vérification catégorie:", categoryError);
+
+      return res.status(500).json({
+        error: "Impossible de vérifier la catégorie.",
+      });
+    }
+
+    if (!category) {
+      return res.status(400).json({
+        error: "Catégorie invalide.",
+      });
+    }
+
+    const { data: goal, error } = await supabase
+      .from("goals")
+      .insert({
+        project_id: project.id,
+        category_id,
+        title: title.trim(),
+        description: description?.trim() || null,
+        goal_type: goal_type || "numeric",
+        unit: unit?.trim() || null,
+        minimum_value:
+          minimum_value === "" || minimum_value === undefined
+            ? null
+            : minimum_value,
+        target_value:
+          target_value === "" || target_value === undefined
+            ? null
+            : target_value,
+        bonus_value:
+          bonus_value === "" || bonus_value === undefined ? null : bonus_value,
+        deadline: deadline || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Erreur création objectif:", error);
+
+      return res.status(400).json({
+        error: error.message,
+      });
+    }
+
+    return res.status(201).json({
+      goal,
+    });
+  } catch (error) {
+    console.error("Erreur serveur création objectif:", error);
+
+    return res.status(500).json({
+      error: "Impossible de créer l’objectif.",
+    });
+  }
+});
+
+router.patch("/goals/:goalId", requireAuth, async (req, res) => {
+  try {
+    const { goalId } = req.params;
+
+    const {
+      title,
+      description,
+      category_id,
+      goal_type,
+      unit,
+      minimum_value,
+      target_value,
+      bonus_value,
+      deadline,
+    } = req.body;
+
+    if (!title?.trim()) {
+      return res.status(400).json({
+        error: "Le titre de l’objectif est requis.",
+      });
+    }
+
+    if (!category_id) {
+      return res.status(400).json({
+        error: "La catégorie est requise.",
+      });
+    }
+
+    const minimum =
+      minimum_value === "" || minimum_value === undefined
+        ? null
+        : Number(minimum_value);
+
+    const target =
+      target_value === "" || target_value === undefined
+        ? null
+        : Number(target_value);
+
+    const bonus =
+      bonus_value === "" || bonus_value === undefined
+        ? null
+        : Number(bonus_value);
+
+    if (minimum !== null && (Number.isNaN(minimum) || minimum < 0)) {
+      return res.status(400).json({
+        error: "La valeur Minimum doit être positive.",
+      });
+    }
+
+    if (target !== null && (Number.isNaN(target) || target < 0)) {
+      return res.status(400).json({
+        error: "La valeur Target doit être positive.",
+      });
+    }
+
+    if (bonus !== null && (Number.isNaN(bonus) || bonus < 0)) {
+      return res.status(400).json({
+        error: "La valeur Bonus doit être positive.",
+      });
+    }
+
+    if (minimum !== null && target !== null && target < minimum) {
+      return res.status(400).json({
+        error: "Target doit être supérieur ou égal à Minimum.",
+      });
+    }
+
+    if (target !== null && bonus !== null && bonus < target) {
+      return res.status(400).json({
+        error: "Bonus doit être supérieur ou égal à Target.",
+      });
+    }
+
+    // Vérifie que l'objectif appartient bien
+    // à un projet de l'utilisateur connecté.
+    const { data: goal, error: goalError } = await supabase
+      .from("goals")
+      .select(
+        `
+                id,
+                project_id,
+                projects!inner (
+                    id,
+                    user_id,
+                    status
+                )
+            `,
+      )
+      .eq("id", goalId)
+      .eq("projects.user_id", req.user.id)
+      .maybeSingle();
+
+    if (goalError) {
+      console.error("Erreur vérification objectif:", goalError);
+
+      return res.status(500).json({
+        error: "Impossible de vérifier l’objectif.",
+      });
+    }
+
+    if (!goal) {
+      return res.status(404).json({
+        error: "Objectif introuvable.",
+      });
+    }
+
+    // Vérifie que la catégorie existe.
+    const { data: category, error: categoryError } = await supabase
+      .from("categories")
+      .select("id")
+      .eq("id", category_id)
+      .maybeSingle();
+
+    if (categoryError) {
+      console.error("Erreur vérification catégorie:", categoryError);
+
+      return res.status(500).json({
+        error: "Impossible de vérifier la catégorie.",
+      });
+    }
+
+    if (!category) {
+      return res.status(400).json({
+        error: "Catégorie invalide.",
+      });
+    }
+
+    const { data: updatedGoal, error: updateError } = await supabase
+      .from("goals")
+      .update({
+        title: title.trim(),
+        description: description?.trim() || null,
+        category_id,
+        goal_type: goal_type || "numeric",
+        unit: unit?.trim() || null,
+        minimum_value: minimum,
+        target_value: target,
+        bonus_value: bonus,
+        deadline: deadline || null,
+      })
+      .eq("id", goalId)
+      .select()
+      .single();
+
+    if (updateError) {
+      console.error("Erreur modification objectif:", updateError);
+
+      return res.status(400).json({
+        error: updateError.message,
+      });
+    }
+
+    return res.json({
+      goal: updatedGoal,
+    });
+  } catch (error) {
+    console.error("Erreur serveur modification objectif:", error);
+
+    return res.status(500).json({
+      error: "Impossible de modifier l’objectif.",
+    });
+  }
+});
+
+router.delete("/goals/:goalId", requireAuth, async (req, res) => {
+  try {
+    const { goalId } = req.params;
+
+    // Vérifie que l'objectif appartient bien
+    // à un projet de l'utilisateur connecté.
+    const { data: goal, error: goalError } = await supabase
+      .from("goals")
+      .select(
+        `
+                id,
+                project_id,
+                projects!inner (
+                    id,
+                    user_id
+                )
+            `,
+      )
+      .eq("id", goalId)
+      .eq("projects.user_id", req.user.id)
+      .maybeSingle();
+
+    if (goalError) {
+      console.error("Erreur vérification objectif:", goalError);
+
+      return res.status(500).json({
+        error: "Impossible de vérifier l’objectif.",
+      });
+    }
+
+    if (!goal) {
+      return res.status(404).json({
+        error: "Objectif introuvable.",
+      });
+    }
+
+    const { error: deleteError } = await supabase
+      .from("goals")
+      .delete()
+      .eq("id", goalId);
+
+    if (deleteError) {
+      console.error("Erreur suppression objectif:", deleteError);
+
+      return res.status(400).json({
+        error: deleteError.message,
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: "Objectif supprimé.",
+    });
+  } catch (error) {
+    console.error("Erreur serveur suppression objectif:", error);
+
+    return res.status(500).json({
+      error: "Impossible de supprimer l’objectif.",
+    });
+  }
+});
+
 export default router;

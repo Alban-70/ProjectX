@@ -228,18 +228,18 @@
 
 # 🟢 PHASE 7 — Objectifs
 
-- [ ] Liste des objectifs
-- [ ] Créer un objectif
-- [ ] Modifier un objectif
-- [ ] Supprimer un objectif
-- [ ] Ajouter une progression
-- [ ] Voir l'historique
-- [ ] Calculer automatiquement le pourcentage
-- [ ] Détecter le Minimum atteint
-- [ ] Détecter le Target atteint
-- [ ] Détecter le Bonus atteint
-- [ ] Afficher une barre de progression
-- [ ] Ajouter des graphiques
+- [X] Liste des objectifs
+- [X] Créer un objectif
+- [X] Modifier un objectif
+- [X] Supprimer un objectif
+- [X] Ajouter une progression
+- [X] Voir l'historique
+- [X] Calculer automatiquement le pourcentage
+- [X] Détecter le Minimum atteint
+- [X] Détecter le Target atteint
+- [X] Détecter le Bonus atteint
+- [X] Afficher une barre de progression
+- [X] Ajouter des graphiques
 
 ---
 

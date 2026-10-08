@@ -160,4 +160,24 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  createGoal(data) {
+    return request("/dashboard/goals", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateGoal(goalId, data) {
+    return request(`/dashboard/goals/${goalId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteGoal(goalId) {
+    return request(`/dashboard/goals/${goalId}`, {
+      method: "DELETE",
+    });
+  },
 };
