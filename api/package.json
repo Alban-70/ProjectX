@@ -1,0 +1,20 @@
+{
+  "name": "project-x-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "API Node.js / Express de Project X (Supabase / PostgreSQL)",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.6",
+    "express": "^5.2.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
