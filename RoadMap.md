@@ -245,32 +245,32 @@
 
 # 🟢 PHASE 8 — Habitudes
 
-- [ ] Liste des habitudes
-- [ ] Créer une habitude
-- [ ] Modifier une habitude
-- [ ] Supprimer une habitude
-- [ ] Marquer une habitude comme accomplie
-- [ ] Voir l'historique
-- [ ] Calculer le streak
-- [ ] Ajouter un calendrier
-- [ ] Ajouter les statistiques
-- [ ] Gérer les habitudes quotidiennes
-- [ ] Gérer les habitudes hebdomadaires
-- [ ] Gérer les habitudes mensuelles
+- [X] Liste des habitudes
+- [X] Créer une habitude
+- [X] Modifier une habitude
+- [X] Supprimer une habitude
+- [X] Marquer une habitude comme accomplie
+- [X] Voir l'historique
+- [X] Calculer le streak
+- [X] Ajouter un calendrier
+- [X] Ajouter les statistiques
+- [X] Gérer les habitudes quotidiennes
+- [X] Gérer les habitudes hebdomadaires
+- [X] Gérer les habitudes mensuelles
 
 ---
 
 # 🟢 PHASE 9 — Journal
 
-- [ ] Créer une entrée
-- [ ] Modifier une entrée
-- [ ] Supprimer une entrée
-- [ ] Ajouter un titre
-- [ ] Ajouter du texte
-- [ ] Ajouter une humeur
-- [ ] Afficher l'historique
-- [ ] Ajouter la recherche
-- [ ] Ajouter le filtre par date
+- [X] Créer une entrée
+- [X] Modifier une entrée
+- [X] Supprimer une entrée
+- [X] Ajouter un titre
+- [X] Ajouter du texte
+- [X] Ajouter une humeur
+- [X] Afficher l'historique
+- [X] Ajouter la recherche
+- [X] Ajouter le filtre par date
 
 ## Plus tard
 

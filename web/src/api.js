@@ -132,14 +132,35 @@ export const api = {
     });
   },
 
-  logHabit(habitId, value = 1, note = "") {
+  logHabit(habitId, value = 1, note = "", date) {
     return request(`/dashboard/habits/${habitId}/log`, {
       method: "POST",
-      body: JSON.stringify({
-        value,
-        note,
-      }),
+      body: JSON.stringify({ value, note, ...(date ? { date } : {}) }),
     });
+  },
+
+  createHabit(data) {
+    return request("/dashboard/habits", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateHabit(habitId, data) {
+    return request(`/dashboard/habits/${habitId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteHabit(habitId) {
+    return request(`/dashboard/habits/${habitId}`, {
+      method: "DELETE",
+    });
+  },
+
+  getHabitHistory(habitId) {
+    return request(`/dashboard/habits/${habitId}/history`);
   },
 
   completeMilestone(milestoneId) {
@@ -177,6 +198,38 @@ export const api = {
 
   deleteGoal(goalId) {
     return request(`/dashboard/goals/${goalId}`, {
+      method: "DELETE",
+    });
+  },
+
+  getJournalEntries({ search = "", from = "", to = "" } = {}) {
+    const params = new URLSearchParams();
+
+    if (search.trim()) params.set("search", search.trim());
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+
+    const query = params.toString();
+
+    return request(`/dashboard/journal${query ? `?${query}` : ""}`);
+  },
+
+  createJournalEntry(data) {
+    return request("/dashboard/journal", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  updateJournalEntry(entryId, data) {
+    return request(`/dashboard/journal/${entryId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  deleteJournalEntry(entryId) {
+    return request(`/dashboard/journal/${entryId}`, {
       method: "DELETE",
     });
   },

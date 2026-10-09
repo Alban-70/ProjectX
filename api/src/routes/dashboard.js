@@ -297,38 +297,33 @@ router.post("/goals/:goalId/log", requireAuth, async (req, res) => {
 
 router.post("/habits/:habitId/log", requireAuth, async (req, res) => {
   try {
-    const userId = req.user.id;
     const { habitId } = req.params;
-
+    const userId = req.user.id;
     const value = req.body?.value === undefined ? 1 : Number(req.body.value);
+    const note =
+      typeof req.body?.note === "string" ? req.body.note.trim() : null;
 
-    const note = req.body?.note || null;
+    const date = req.body?.date || new Date().toISOString().slice(0, 10);
 
-    if (Number.isNaN(value) || value < 0) {
+    if (!Number.isFinite(value) || value < 0) {
       return res.status(400).json({
         error: "La valeur de l’habitude est invalide.",
       });
     }
 
-    const { data: habit, error: habitError } = await supabase
-      .from("habits")
-      .select(
-        `
-                    id,
-                    project_id,
-                    name,
-                    projects!inner(
-                        user_id
-                    )
-                `,
-      )
-      .eq("id", habitId)
-      .eq("projects.user_id", userId)
-      .maybeSingle();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({
+        error: "La date de validation est invalide.",
+      });
+    }
+
+    const { data: habit, error: habitError } = await getOwnedHabit(
+      habitId,
+      userId,
+    );
 
     if (habitError) {
       console.error("Erreur vérification habitude:", habitError);
-
       return res.status(500).json({
         error: "Impossible de vérifier cette habitude.",
       });
@@ -340,68 +335,71 @@ router.post("/habits/:habitId/log", requireAuth, async (req, res) => {
       });
     }
 
-    const today = new Date().toISOString().split("T")[0];
+    if (habit.start_date && date < habit.start_date) {
+      return res.status(400).json({
+        error: "Cette habitude n’a pas encore commencé.",
+      });
+    }
+
+    if (habit.end_date && date > habit.end_date) {
+      return res.status(400).json({
+        error: "La période de cette habitude est terminée.",
+      });
+    }
 
     const { data: existingLog, error: existingError } = await supabase
       .from("habit_logs")
       .select("*")
       .eq("habit_id", habitId)
-      .eq("date", today)
+      .eq("date", date)
       .maybeSingle();
 
     if (existingError) {
+      console.error("Erreur lecture historique:", existingError);
       return res.status(500).json({
         error: "Impossible de vérifier la validation actuelle.",
       });
     }
 
     let log;
+    let error;
 
     if (existingLog) {
-      const { data, error } = await supabase
+      const result = await supabase
         .from("habit_logs")
-        .update({
-          value,
-          note,
-        })
+        .update({ value, note })
         .eq("id", existingLog.id)
         .select()
         .single();
 
-      if (error) {
-        return res.status(500).json({
-          error: "Impossible de mettre à jour l’habitude.",
-        });
-      }
-
-      log = data;
+      log = result.data;
+      error = result.error;
     } else {
-      const { data, error } = await supabase
+      const result = await supabase
         .from("habit_logs")
         .insert({
           habit_id: habitId,
-          date: today,
+          date,
           value,
           note,
         })
         .select()
         .single();
 
-      if (error) {
-        return res.status(500).json({
-          error: "Impossible de valider l’habitude.",
-        });
-      }
-
-      log = data;
+      log = result.data;
+      error = result.error;
     }
 
-    return res.json({
-      log,
-    });
-  } catch (error) {
-    console.error("Erreur log habitude:", error);
+    if (error) {
+      console.error("Erreur enregistrement habitude:", error);
+      return res.status(500).json({
+        error: "Impossible d’enregistrer cette réalisation.",
+      });
+    }
 
+    return res.json({ log });
+  } catch (error) {
+    console.error("Erreur validation habitude:", error);
     return res.status(500).json({
       error: "Erreur interne du serveur.",
     });
@@ -1034,6 +1032,609 @@ router.delete("/goals/:goalId", requireAuth, async (req, res) => {
 
     return res.status(500).json({
       error: "Impossible de supprimer l’objectif.",
+    });
+  }
+});
+
+// ============================================================
+// OUTILS DE VALIDATION DES HABITUDES
+// ============================================================
+
+const habitFrequencies = ["daily", "weekly", "monthly"];
+
+function validateHabitPayload(body, { partial = false } = {}) {
+  const errors = [];
+
+  if (!partial || body.name !== undefined) {
+    if (typeof body.name !== "string" || !body.name.trim()) {
+      errors.push("Le nom de l’habitude est requis.");
+    } else if (body.name.trim().length > 150) {
+      errors.push("Le nom ne peut pas dépasser 150 caractères.");
+    }
+  }
+
+  if (!partial || body.category_id !== undefined) {
+    if (typeof body.category_id !== "string" || !body.category_id) {
+      errors.push("La catégorie est requise.");
+    }
+  }
+
+  if (!partial || body.frequency !== undefined) {
+    if (!habitFrequencies.includes(body.frequency)) {
+      errors.push("La fréquence doit être daily, weekly ou monthly.");
+    }
+  }
+
+  if (!partial || body.times_per_period !== undefined) {
+    const times = Number(body.times_per_period);
+
+    if (
+      !Number.isInteger(times) ||
+      times < 1 ||
+      times > 31
+    ) {
+      errors.push("Le nombre de répétitions doit être compris entre 1 et 31.");
+    }
+  }
+
+  for (const field of ["start_date", "end_date"]) {
+    if (body[field] !== undefined && body[field] !== null && body[field] !== "") {
+      if (
+        typeof body[field] !== "string" ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(body[field]) ||
+        Number.isNaN(Date.parse(`${body[field]}T00:00:00Z`))
+      ) {
+        errors.push(`La date ${field} est invalide.`);
+      }
+    }
+  }
+
+  const startDate = body.start_date;
+  const endDate = body.end_date;
+
+  if (startDate && endDate && endDate < startDate) {
+    errors.push("La date de fin doit être postérieure à la date de début.");
+  }
+
+  return errors;
+}
+
+async function getOwnedHabit(habitId, userId) {
+  return supabase
+    .from("habits")
+    .select("*, projects!inner(id, user_id)")
+    .eq("id", habitId)
+    .eq("projects.user_id", userId)
+    .maybeSingle();
+}
+
+async function categoryBelongsToProject(categoryId, projectId) {
+  const { data, error } = await supabase
+    .from("project_categories")
+    .select("category_id")
+    .eq("project_id", projectId)
+    .eq("category_id", categoryId)
+    .maybeSingle();
+
+  return {
+    valid: Boolean(data),
+    error,
+  };
+}
+
+
+/* ============================================================
+   HISTORIQUE ET STATISTIQUES D'UNE HABITUDE
+   ============================================================ */
+
+router.get("/habits/:habitId/history", requireAuth, async (req, res) => {
+  try {
+    const { habitId } = req.params;
+
+    const { data: habit, error: habitError } = await getOwnedHabit(
+      habitId,
+      req.user.id
+    );
+
+    if (habitError) {
+      console.error("Erreur vérification habitude:", habitError);
+      return res.status(500).json({ error: "Impossible de vérifier l'habitude." });
+    }
+
+    if (!habit) {
+      return res.status(404).json({ error: "Habitude introuvable." });
+    }
+
+    const { data: logs, error } = await supabase
+      .from("habit_logs")
+      .select("id, habit_id, date, value, note")
+      .eq("habit_id", habitId)
+      .order("date", { ascending: true });
+
+    if (error) {
+      console.error("Erreur historique:", error);
+      return res.status(500).json({ error: "Impossible de récupérer l'historique." });
+    }
+
+    const completedLogs = (logs || []).filter(log => Number(log.value) > 0);
+    const totalCompletions = completedLogs.length;
+
+    return res.json({
+      habit,
+      logs: logs || [],
+      stats: {
+        totalCompletions,
+        firstCompletion: completedLogs[0]?.date || null,
+        lastCompletion: completedLogs.at(-1)?.date || null,
+      },
+    });
+  } catch (error) {
+    console.error("Erreur historique habitude:", error);
+    return res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
+
+// ============================================================
+// CRÉER UNE HABITUDE
+// ============================================================
+
+router.post("/habits", requireAuth, async (req, res) => {
+  try {
+    const errors = validateHabitPayload(req.body);
+
+    if (errors.length) {
+      return res.status(400).json({ error: errors[0] });
+    }
+
+    const { data: project, error: projectError } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("user_id", req.user.id)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (projectError) {
+      console.error("Erreur récupération projet:", projectError);
+      return res.status(500).json({ error: "Impossible de récupérer le projet." });
+    }
+
+    if (!project) {
+      return res.status(404).json({ error: "Aucun projet actif trouvé." });
+    }
+
+    const { name, category_id, frequency, times_per_period, start_date, end_date } =
+      req.body;
+
+    const category = await categoryBelongsToProject(category_id, project.id);
+
+    if (category.error) {
+      return res.status(500).json({ error: "Impossible de vérifier la catégorie." });
+    }
+
+    if (!category.valid) {
+      return res.status(400).json({
+        error: "Cette catégorie ne fait pas partie du projet actif.",
+      });
+    }
+
+    const { data: habit, error } = await supabase
+      .from("habits")
+      .insert({
+        project_id: project.id,
+        name: name.trim(),
+        category_id,
+        frequency,
+        times_per_period: Number(times_per_period),
+        start_date: start_date || null,
+        end_date: end_date || null,
+      })
+      .select()
+      .single();
+
+    
+if (error) {
+  console.error("Erreur création habitude Supabase:", {
+    message: error.message,
+    code: error.code,
+    details: error.details,
+    hint: error.hint,
+  });
+
+  return res.status(500).json({
+    error: "Impossible de créer l’habitude.",
+    details: error.message,
+    code: error.code,
+  });
+}
+
+    return res.status(201).json({ habit });
+  } catch (error) {
+    console.error("Erreur création habitude:", error);
+    return res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
+
+// ============================================================
+// MODIFIER UNE HABITUDE
+// ============================================================
+
+router.patch("/habits/:habitId", requireAuth, async (req, res) => {
+  try {
+    const errors = validateHabitPayload(req.body, { partial: true });
+
+    if (errors.length) {
+      return res.status(400).json({ error: errors[0] });
+    }
+
+    const { habitId } = req.params;
+
+    const { data: habit, error: habitError } = await getOwnedHabit(
+      habitId,
+      req.user.id,
+    );
+
+    if (habitError) {
+      console.error("Erreur vérification habitude:", habitError);
+      return res.status(500).json({ error: "Impossible de vérifier l’habitude." });
+    }
+
+    if (!habit) {
+      return res.status(404).json({ error: "Habitude introuvable." });
+    }
+
+    const merged = {
+      name: req.body.name ?? habit.name,
+      category_id: req.body.category_id ?? habit.category_id,
+      frequency: req.body.frequency ?? habit.frequency,
+      times_per_period:
+        req.body.times_per_period ?? habit.times_per_period,
+      start_date: req.body.start_date ?? habit.start_date,
+      end_date: req.body.end_date ?? habit.end_date,
+    };
+
+    const mergedErrors = validateHabitPayload(merged);
+
+    if (mergedErrors.length) {
+      return res.status(400).json({ error: mergedErrors[0] });
+    }
+
+    const category = await categoryBelongsToProject(
+      merged.category_id,
+      habit.project_id,
+    );
+
+    if (category.error) {
+      return res.status(500).json({ error: "Impossible de vérifier la catégorie." });
+    }
+
+    if (!category.valid) {
+      return res.status(400).json({
+        error: "Cette catégorie ne fait pas partie du projet.",
+      });
+    }
+
+    const { data: updatedHabit, error } = await supabase
+      .from("habits")
+      .update({
+        ...merged,
+        name: merged.name.trim(),
+        times_per_period: Number(merged.times_per_period),
+        start_date: merged.start_date || null,
+        end_date: merged.end_date || null,
+      })
+      .eq("id", habitId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Erreur modification habitude:", error);
+      return res.status(500).json({ error: "Impossible de modifier l’habitude." });
+    }
+
+    return res.json({ habit: updatedHabit });
+  } catch (error) {
+    console.error("Erreur modification habitude:", error);
+    return res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
+
+// ============================================================
+// SUPPRIMER UNE HABITUDE
+// ============================================================
+
+router.delete("/habits/:habitId", requireAuth, async (req, res) => {
+  try {
+    const { habitId } = req.params;
+
+    const { data: habit, error: habitError } = await getOwnedHabit(
+      habitId,
+      req.user.id,
+    );
+
+    if (habitError) {
+      console.error("Erreur vérification habitude:", habitError);
+      return res.status(500).json({ error: "Impossible de vérifier l’habitude." });
+    }
+
+    if (!habit) {
+      return res.status(404).json({ error: "Habitude introuvable." });
+    }
+
+    const { error } = await supabase
+      .from("habits")
+      .delete()
+      .eq("id", habitId);
+
+    if (error) {
+      console.error("Erreur suppression habitude:", error);
+      return res.status(500).json({ error: "Impossible de supprimer l’habitude." });
+    }
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Erreur suppression habitude:", error);
+    return res.status(500).json({ error: "Erreur interne du serveur." });
+  }
+});
+
+
+const isValidJournalDate = (date) => {
+  if (typeof date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return false;
+  }
+
+  const parsed = new Date(`${date}T00:00:00.000Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === date
+  );
+};
+
+async function getActiveJournalProject(userId) {
+  return supabase
+    .from("projects")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("status", "active")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+}
+
+async function getOwnedJournalEntry(entryId, userId) {
+  return supabase
+    .from("journal_entries")
+    .select("*, projects!inner(id, user_id)")
+    .eq("id", entryId)
+    .eq("projects.user_id", userId)
+    .maybeSingle();
+}
+
+// GET /dashboard/journal?search=...&from=YYYY-MM-DD&to=YYYY-MM-DD
+router.get("/journal", requireAuth, async (req, res) => {
+  try {
+    const { data: project, error: projectError } =
+      await getActiveJournalProject(req.user.id);
+
+    if (projectError) throw projectError;
+
+    if (!project) return res.json({ entries: [] });
+
+    const { search = "", from = "", to = "" } = req.query;
+
+    if (from && !isValidJournalDate(from)) {
+      return res.status(400).json({ error: "Date de début invalide." });
+    }
+
+    if (to && !isValidJournalDate(to)) {
+      return res.status(400).json({ error: "Date de fin invalide." });
+    }
+
+    if (from && to && from > to) {
+      return res.status(400).json({
+        error: "La date de début doit précéder la date de fin.",
+      });
+    }
+
+    let query = supabase
+      .from("journal_entries")
+      .select("*")
+      .eq("project_id", project.id)
+      .order("created_at", { ascending: false });
+
+    if (from) query = query.gte("created_at", `${from}T00:00:00.000Z`);
+
+    if (to) {
+      const endDate = new Date(`${to}T00:00:00.000Z`);
+      endDate.setUTCDate(endDate.getUTCDate() + 1);
+      query = query.lt("created_at", endDate.toISOString());
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    const term = typeof search === "string" ? search.trim().toLowerCase() : "";
+    const entries = (data || []).filter((entry) => {
+      if (!term) return true;
+
+      return (
+        (entry.title || "").toLowerCase().includes(term) ||
+        (entry.content || "").toLowerCase().includes(term)
+      );
+    });
+
+    return res.json({ entries });
+  } catch (error) {
+    console.error("Erreur lecture journal:", error);
+    return res.status(500).json({
+      error: "Impossible de récupérer le journal.",
+    });
+  }
+});
+
+// POST /dashboard/journal
+router.post("/journal", requireAuth, async (req, res) => {
+  try {
+    const { title, content, mood = null } = req.body || {};
+
+    if (typeof title !== "string" || !title.trim()) {
+      return res.status(400).json({ error: "Le titre est obligatoire." });
+    }
+
+    if (title.trim().length > 200) {
+      return res.status(400).json({
+        error: "Le titre ne peut pas dépasser 200 caractères.",
+      });
+    }
+
+    if (typeof content !== "string" || !content.trim()) {
+      return res.status(400).json({ error: "Le texte est obligatoire." });
+    }
+
+    if (
+      mood !== null &&
+      mood !== undefined &&
+      mood !== "" &&
+      (!Number.isInteger(Number(mood)) || Number(mood) < 1 || Number(mood) > 5)
+    ) {
+      return res.status(400).json({
+        error: "L'humeur doit être un nombre entre 1 et 5.",
+      });
+    }
+
+    const { data: project, error: projectError } =
+      await getActiveJournalProject(req.user.id);
+
+    if (projectError) throw projectError;
+
+    if (!project) {
+      return res.status(404).json({ error: "Aucun projet actif trouvé." });
+    }
+
+    const { data: entry, error } = await supabase
+      .from("journal_entries")
+      .insert({
+        project_id: project.id,
+        title: title.trim(),
+        content: content.trim(),
+        mood: mood === "" || mood == null ? null : Number(mood),
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.status(201).json({ entry });
+  } catch (error) {
+    console.error("Erreur création journal:", error);
+    return res.status(500).json({
+      error: "Impossible de créer l'entrée du journal.",
+    });
+  }
+});
+
+// PATCH /dashboard/journal/:entryId
+router.patch("/journal/:entryId", requireAuth, async (req, res) => {
+  try {
+    const { entryId } = req.params;
+    const { title, content, mood } = req.body || {};
+    const updates = {};
+
+    if (title !== undefined) {
+      if (
+        typeof title !== "string" ||
+        !title.trim() ||
+        title.trim().length > 200
+      ) {
+        return res.status(400).json({ error: "Le titre est invalide." });
+      }
+      updates.title = title.trim();
+    }
+
+    if (content !== undefined) {
+      if (typeof content !== "string" || !content.trim()) {
+        return res.status(400).json({ error: "Le texte est obligatoire." });
+      }
+      updates.content = content.trim();
+    }
+
+    if (mood !== undefined) {
+      if (
+        mood !== null &&
+        mood !== "" &&
+        (!Number.isInteger(Number(mood)) ||
+          Number(mood) < 1 ||
+          Number(mood) > 5)
+      ) {
+        return res
+          .status(400)
+          .json({ error: "L'humeur doit être un nombre entre 1 et 5." });
+      }
+      updates.mood = mood === null || mood === "" ? null : Number(mood);
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ error: "Aucune modification fournie." });
+    }
+
+    const { data: existing, error: ownershipError } =
+      await getOwnedJournalEntry(entryId, req.user.id);
+
+    if (ownershipError) throw ownershipError;
+
+    if (!existing) {
+      return res.status(404).json({ error: "Entrée introuvable." });
+    }
+
+    const { data: entry, error } = await supabase
+      .from("journal_entries")
+      .update(updates)
+      .eq("id", entryId)
+      .eq("project_id", existing.project_id)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    return res.json({ entry });
+  } catch (error) {
+    console.error("Erreur modification journal:", error);
+    return res.status(500).json({
+      error: "Impossible de modifier l'entrée.",
+    });
+  }
+});
+
+// DELETE /dashboard/journal/:entryId
+router.delete("/journal/:entryId", requireAuth, async (req, res) => {
+  try {
+    const { entryId } = req.params;
+
+    const { data: existing, error: ownershipError } =
+      await getOwnedJournalEntry(entryId, req.user.id);
+
+    if (ownershipError) throw ownershipError;
+
+    if (!existing) {
+      return res.status(404).json({ error: "Entrée introuvable." });
+    }
+
+    const { error } = await supabase
+      .from("journal_entries")
+      .delete()
+      .eq("id", entryId)
+      .eq("project_id", existing.project_id);
+
+    if (error) throw error;
+
+    return res.json({ success: true });
+  } catch (error) {
+    console.error("Erreur suppression journal:", error);
+    return res.status(500).json({
+      error: "Impossible de supprimer l'entrée.",
     });
   }
 });
