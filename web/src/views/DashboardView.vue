@@ -46,12 +46,29 @@ const selectedHabitId = ref('')
 const isHabitDropdownOpen = ref(false)
 const habitDropdownRef = ref(null)
 
+// État pour la surbrillance
+const highlightedElement = ref(null)
+
 onMounted(async () => {
     await loadDashboard()
     document.addEventListener('click', handleClickOutsideHabitDropdown)
 })
 
 onBeforeUnmount(() => document.removeEventListener('click', handleClickOutsideHabitDropdown))
+
+function triggerHighlight(elementIdOrQuery) {
+    const el = document.querySelector(elementIdOrQuery)
+    if (!el) return
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    highlightedElement.value = elementIdOrQuery
+
+    setTimeout(() => {
+        if (highlightedElement.value === elementIdOrQuery) {
+            highlightedElement.value = null
+        }
+    }, 2500)
+}
 
 function selectHabit(habitId) {
     selectedHabitId.value = habitId
@@ -392,10 +409,24 @@ async function handleSaveCheckin(checkinData) {
                                 <p>Cette vue rassemble tout ce que tu peux accomplir aujourd'hui pour garder une
                                     dynamique constante.</p>
                                 <div class="px-guide-steps">
-                                    <span><strong>Valider une routine :</strong> Clique sur le bouton <em>« Valider
-                                            »</em> face à une habitude.</span>
-                                    <span><strong>Faire ton bilan :</strong> Remplis le widget <em>Check-in</em> sur la
-                                        droite pour enregistrer ton humeur et tes réussites du jour.</span>
+                                    <span>
+                                        <strong>Valider une routine :</strong>
+                                        Clique sur
+                                        <button type="button" class="px-guide-link"
+                                            @click="triggerHighlight('.px-habit-btn')">
+                                            « Valider »
+                                        </button>
+                                        face à une habitude.
+                                    </span>
+                                    <span>
+                                        <strong>Faire ton bilan :</strong>
+                                        Remplis le widget
+                                        <button type="button" class="px-guide-link"
+                                            @click="triggerHighlight('#widget-checkin')">
+                                            Check-in
+                                        </button>
+                                        sur la droite pour enregistrer ton humeur et tes réussites du jour.
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -424,7 +455,7 @@ async function handleSaveCheckin(checkinData) {
                                             <div class="px-today-item-top">
                                                 <h4>{{ h.name }}</h4>
                                                 <button type="button" class="px-habit-btn"
-                                                    :class="{ 'px-habit-btn--done': isHabitDoneToday(h.id) }"
+                                                    :class="{ 'px-habit-btn--done': isHabitDoneToday(h.id), 'px-highlight-flash': highlightedElement === '.px-habit-btn' }"
                                                     @click="toggleHabit(h)">
                                                     {{ isHabitDoneToday(h.id) ? 'Fait ✓' : 'Valider' }}
                                                 </button>
@@ -436,7 +467,8 @@ async function handleSaveCheckin(checkinData) {
                         </section>
                     </div>
 
-                    <aside class="px-side-column">
+                    <aside id="widget-checkin" class="px-side-column"
+                        :class="{ 'px-highlight-flash': highlightedElement === '#widget-checkin' }">
                         <CheckinWidget :checkin="checkin" :saving="savingCheckin" @save="handleSaveCheckin" />
                     </aside>
                 </div>
@@ -451,12 +483,24 @@ async function handleSaveCheckin(checkinData) {
                             <h3>Domaines de vie & Objectifs chiffrés</h3>
                             <p>Organise tes ambitions et suis tes cibles chiffrées par domaine d'activité.</p>
                             <div class="px-guide-steps">
-                                <span><strong>Créer un objectif :</strong> Clique sur <em>« + Nouvel objectif »</em> et
-                                    définis tes niveaux (Minimum, Target, Bonus).</span>
-                                <span><strong>Saisir une avance :</strong> Sur une carte, clique sur <em>« + Progression
-                                        »</em> pour ajouter tes derniers résultats (ex: +5 km).</span>
-                                <span><strong>Gérer une carte :</strong> Utilise le <em>crayon ✎</em> pour modifier ou
-                                    la <em>croix ×</em> pour supprimer.</span>
+                                <span>
+                                    <strong>Créer un objectif :</strong>
+                                    Clique sur
+                                    <button type="button" class="px-guide-link"
+                                        @click="triggerHighlight('#btn-create-goal')">
+                                        « + Nouvel objectif »
+                                    </button>
+                                    et définis tes niveaux (Minimum, Target, Bonus).
+                                </span>
+                                <span>
+                                    <strong>Saisir une avance :</strong>
+                                    Sur une carte d'objectif, clique sur
+                                    <button type="button" class="px-guide-link"
+                                        @click="triggerHighlight('.px-dashboard-goals-list')">
+                                        « + Progression »
+                                    </button>
+                                    pour ajouter tes derniers résultats.
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -477,15 +521,19 @@ async function handleSaveCheckin(checkinData) {
                     <section class="px-card">
                         <div class="px-section-header">
                             <h2>Objectifs</h2>
-                            <button type="button" class="px-dashboard-button" @click="openCreateGoal">+ Nouvel
-                                objectif</button>
+                            <button id="btn-create-goal" type="button" class="px-dashboard-button"
+                                :class="{ 'px-highlight-flash': highlightedElement === '#btn-create-goal' }"
+                                @click="openCreateGoal">
+                                + Nouvel objectif
+                            </button>
                         </div>
 
                         <GoalFormModal :show="showGoalForm" :editing-goal="editingGoal" :categories="categories"
                             :saving="goalSaving" :error="goalError" @close="showGoalForm = false"
                             @save="handleSaveGoal" />
 
-                        <div class="px-dashboard-goals-list">
+                        <div class="px-dashboard-goals-list"
+                            :class="{ 'px-highlight-flash': highlightedElement === '.px-dashboard-goals-list' }">
                             <GoalCard v-for="goal in goals" :key="goal.id" :goal="goal"
                                 :category-name="getCategoryName(goal.category_id)" :logs="getGoalLogs(goal.id)"
                                 :total-progress="getGoalTotalProgress(goal.id)"
@@ -510,12 +558,24 @@ async function handleSaveCheckin(checkinData) {
                             <p>Analyse la constance de tes routines et conserve tes séries actives (*streaks*) sur le
                                 long terme.</p>
                             <div class="px-guide-steps">
-                                <span><strong>Sélectionner une habitude :</strong> Utilise le menu déroulant sur-mesure
-                                    ci-dessous pour choisir la routine à analyser.</span>
-                                <span><strong>Consulter le calendrier :</strong> Visualise les jours validés et ton taux
-                                    de réussite mensuel.</span>
-                                <span><strong>Ajouter une routine :</strong> Clique sur <em>« + Nouvelle habitude »</em>
-                                    pour en configurer une nouvelle.</span>
+                                <span>
+                                    <strong>Sélectionner une habitude :</strong>
+                                    Utilise le
+                                    <button type="button" class="px-guide-link"
+                                        @click="triggerHighlight('#select-habit-dropdown')">
+                                        menu déroulant sur-mesure
+                                    </button>
+                                    ci-dessous pour choisir la routine à analyser.
+                                </span>
+                                <span>
+                                    <strong>Ajouter une routine :</strong>
+                                    Clique sur
+                                    <button type="button" class="px-guide-link"
+                                        @click="triggerHighlight('#btn-create-habit')">
+                                        « + Nouvelle habitude »
+                                    </button>
+                                    pour en configurer une nouvelle.
+                                </span>
                             </div>
                         </div>
                     </div>
@@ -526,7 +586,9 @@ async function handleSaveCheckin(checkinData) {
                                 <h2>Gestion des Habitudes</h2>
                                 <p class="px-sub-text">Consulte l'historique et la régularité de tes routines.</p>
                             </div>
-                            <button type="button" class="px-dashboard-button" @click="openCreateHabit">
+                            <button id="btn-create-habit" type="button" class="px-dashboard-button"
+                                :class="{ 'px-highlight-flash': highlightedElement === '#btn-create-habit' }"
+                                @click="openCreateHabit">
                                 + Nouvelle habitude
                             </button>
                         </div>
@@ -534,7 +596,8 @@ async function handleSaveCheckin(checkinData) {
                         <!-- SÉLECTEUR PERSONNALISÉ D'HABITUDE -->
                         <div v-if="habits.length" class="px-habit-selector-wrapper" ref="habitDropdownRef">
                             <label class="px-selector-label">Habitude consultée</label>
-                            <div class="px-custom-select" :class="{ 'is-open': isHabitDropdownOpen }"
+                            <div id="select-habit-dropdown" class="px-custom-select"
+                                :class="{ 'is-open': isHabitDropdownOpen, 'px-highlight-flash': highlightedElement === '#select-habit-dropdown' }"
                                 @click="isHabitDropdownOpen = !isHabitDropdownOpen">
                                 <div class="px-select-current">
                                     <span class="px-habit-dot"></span>
@@ -578,8 +641,15 @@ async function handleSaveCheckin(checkinData) {
                             <h3>Jalons & Feuilles de route</h3>
                             <p>Valide les grandes étapes majeures qui structurent l'avancement global de ton projet.</p>
                             <div class="px-guide-steps">
-                                <span><strong>Compléter une étape :</strong> Clique sur <em>« Marquer comme accompli
-                                        »</em> lorsque tu as franchi un cap.</span>
+                                <span>
+                                    <strong>Compléter une étape :</strong>
+                                    Clique sur
+                                    <button type="button" class="px-guide-link"
+                                        @click="triggerHighlight('.px-milestone-list')">
+                                        « Marquer comme accompli »
+                                    </button>
+                                    lorsque tu as franchi un cap.
+                                </span>
                                 <span><strong>Ajuster :</strong> Tu peux à tout moment cliquer sur <em>« Rouvrir »</em>
                                     si une étape nécessite plus de travail.</span>
                             </div>
@@ -588,7 +658,8 @@ async function handleSaveCheckin(checkinData) {
 
                     <section class="px-card">
                         <h2>Jalons du parcours</h2>
-                        <div class="px-milestone-list">
+                        <div class="px-milestone-list"
+                            :class="{ 'px-highlight-flash': highlightedElement === '.px-milestone-list' }">
                             <article v-for="m in sortedMilestones" :key="m.id" class="px-milestone-item"
                                 :class="{ 'is-completed': m.completed_at }">
                                 <h3>{{ m.title }}</h3>
@@ -602,23 +673,6 @@ async function handleSaveCheckin(checkinData) {
 
                 <!-- 5. JOURNAL PERSONNEL -->
                 <div v-else-if="activeTab === 'journal'" class="px-tab-pane">
-
-                    <!-- BANDEAU GUIDE PÉDAGOGIQUE -->
-                    <div class="px-guide-card">
-                        <div class="px-guide-icon">📖</div>
-                        <div class="px-guide-body">
-                            <h3>Journal Personnel</h3>
-                            <p>Prends du recul sur ton parcours, consigne tes réflexions et garde une trace de tes
-                                prises de conscience.</p>
-                            <div class="px-guide-steps">
-                                <span><strong>Rédiger :</strong> Clique sur <em>« + Nouvelle entrée »</em> pour ajouter
-                                    un titre, un texte et une humeur.</span>
-                                <span><strong>Rechercher :</strong> Utilise les filtres de recherche et de dates pour
-                                    retrouver tes souvenirs.</span>
-                            </div>
-                        </div>
-                    </div>
-
                     <JournalTab :project-id="project?.id" />
                 </div>
             </div>
@@ -741,7 +795,7 @@ async function handleSaveCheckin(checkinData) {
     border-bottom: 2px solid #4d7358;
 }
 
-/* BANDEAU DE GUIDE PÉDAGOGIQUE (TAILLES DE TEXTE AGRANDIES) */
+/* BANDEAU DE GUIDE PÉDAGOGIQUE */
 .px-guide-card {
     display: flex;
     gap: 18px;
@@ -770,7 +824,6 @@ async function handleSaveCheckin(checkinData) {
 .px-guide-body h3 {
     margin: 0 0 6px;
     font-size: 17px;
-    /* Agrandit le titre du guide */
     font-weight: 800;
     color: #382c23;
 }
@@ -778,7 +831,6 @@ async function handleSaveCheckin(checkinData) {
 .px-guide-body p {
     margin: 0 0 12px;
     font-size: 14.5px;
-    /* Agrandit le texte descriptif */
     color: #5d4c3f;
     line-height: 1.5;
 }
@@ -788,7 +840,6 @@ async function handleSaveCheckin(checkinData) {
     flex-direction: column;
     gap: 6px;
     font-size: 13.5px;
-    /* Agrandit la taille des étapes */
     color: #4a3c31;
     line-height: 1.4;
 }
@@ -853,6 +904,8 @@ async function handleSaveCheckin(checkinData) {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
     gap: 20px;
+    border-radius: 20px;
+    transition: all 0.3s ease;
 }
 
 .px-dashboard-button {
@@ -864,6 +917,7 @@ async function handleSaveCheckin(checkinData) {
     font-weight: 800;
     font-size: 13px;
     cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .px-progress-track {
@@ -906,6 +960,7 @@ async function handleSaveCheckin(checkinData) {
     cursor: pointer;
     font-weight: 800;
     font-size: 12px;
+    transition: all 0.2s ease;
 }
 
 .px-habit-btn--done {
@@ -918,6 +973,8 @@ async function handleSaveCheckin(checkinData) {
     display: flex;
     flex-direction: column;
     gap: 12px;
+    border-radius: 18px;
+    transition: all 0.3s ease;
 }
 
 .px-milestone-item {
@@ -1090,5 +1147,59 @@ async function handleSaveCheckin(checkinData) {
 .dropdown-leave-to {
     opacity: 0;
     transform: translateY(-6px);
+}
+
+/* LIENS CLIQUABLES DANS LES GUIDES */
+.px-guide-link {
+    background: #f0e6d6;
+    color: #5a4638;
+    border: 1px solid #dccaba;
+    padding: 1px 7px;
+    border-radius: 6px;
+    font-weight: 800;
+    font-size: 12.5px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.px-guide-link:hover {
+    background: #5a4638;
+    color: #ffffff;
+    border-color: #5a4638;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(90, 70, 56, 0.2);
+}
+
+/* CLASS ANIMÉE APPLIQUÉE À L'ÉLÉMENT CIBLE */
+.px-highlight-flash {
+    animation: highlight-pulse 2s ease-in-out infinite !important;
+    position: relative;
+    z-index: 10;
+}
+
+/* ANIMATION DE SURBRILLANCE / GLOW SOFT ZEN */
+@keyframes highlight-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(77, 115, 88, 0.7);
+        outline: 3px solid #4d7358;
+        outline-offset: 3px;
+    }
+
+    50% {
+        box-shadow: 0 0 22px 10px rgba(77, 115, 88, 0.45);
+        outline: 3px solid #2d4734;
+        outline-offset: 6px;
+        transform: scale(1.02);
+    }
+
+    100% {
+        box-shadow: 0 0 0 0 rgba(77, 115, 88, 0);
+        outline: 3px solid transparent;
+        outline-offset: 0px;
+    }
 }
 </style>
